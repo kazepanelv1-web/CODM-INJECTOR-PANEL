@@ -184,23 +184,23 @@ def verify():
         return "invalid"
     data = db["keys"][key]
     if data.get("revoked"):
-        send_telegram_alert(f"ðŸš« *Key Revoked*\nKey: `{key}`\nDevice: `{device}`")
+        send_telegram_alert(f"*Key Revoked*\nKey: `{key}`\nDevice: `{device}`")
         return "revoked"
     if time.time() > data["expiry"]:
-        send_telegram_alert(f"âš ï¸ *Key Expired*\nKey: `{key}`\nDevice: `{device}`")
+        send_telegram_alert(f"*Key Expired*\nKey: `{key}`\nDevice: `{device}`")
         return "expired"
     if data["device"] is None:
         data["device"] = device
         data["login_time"] = time.time()
         save_db()
         remaining = int(data["expiry"] - time.time())
-        send_telegram_alert(f"âœ“ *Key Used*\nKey: `{key}`\nDevice: `{device}`\nExpires in: `{remaining}s`")
+        send_telegram_alert(f"*Key Used*\nKey: `{key}`\nDevice: `{device}`\nExpires in: `{remaining}s`")
         return "valid"
     if data["device"] == device:
         remaining = int(data["expiry"] - time.time())
-        send_telegram_alert(f"âœ“ *Key Used*\nKey: `{key}`\nDevice: `{device}`\nExpires in: `{remaining}s`")
+        send_telegram_alert(f"*Key Used*\nKey: `{key}`\nDevice: `{device}`\nExpires in: `{remaining}s`")
         return "valid"
-    send_telegram_alert(f"ðŸ”’ *Key Locked - Device Mismatch*\nKey: `{key}`\nDevice Attempt: `{device}`\nAssigned Device: `{data['device']}`")
+    send_telegram_alert(f"*Key Locked - Device Mismatch*\nKey: `{key}`\nDevice Attempt: `{device}`\nAssigned Device: `{data['device']}`")
     return "locked"
 
 # ======================
@@ -213,7 +213,7 @@ def revoke():
         return jsonify({"status": "error", "message": "Key not found"}), 404
     db["keys"][key]["revoked"] = True
     save_db()
-    send_telegram_alert(f"ðŸš« *Key Revoked*\nKey: `{key}`")
+    send_telegram_alert(f" *Key Revoked*\nKey: `{key}`")
     return jsonify({"status": "success", "message": f"{key} revoked"})
 
 # ======================
