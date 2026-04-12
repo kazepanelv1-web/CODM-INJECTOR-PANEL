@@ -126,44 +126,60 @@ def token():
 # ======================
 @app.route("/getkey")
 def getkey():
+
     token_id = request.args.get("token")
     source = request.args.get("src", "site")
-    # Naka-set na dito ang default na 12h validity
     duration = request.args.get("duration", "12h")
+
     now = time.time()
 
-    if not token_id or token_id not in db["tokens"]:
-        return jsonify({"status": "error", "message": "Invalid Token"}), 403
+    # â— STRICT TOKEN CHECK
+    if not token_id:
+        return jsonify({
+            "status": "error",
+            "message": "Missing token"
+        }), 403
 
-    ip = db["tokens"][token_id]["ip"]
+    if token_id not in db["tokens"]:
+        return jsonify({
+            "status": "error",
+            "message": "Token expired. Please generate again."
+        }), 403
 
-    # --- ANTI-SPAM CHECK (Dito papasok yung 1 min limit) ---
+    token_data = db["tokens"][token_id]
+    ip = token_data["ip"]
+
+    # ðŸ”’ Anti spam check
     if ip in db["ip_limit"]:
         wait = int(KEY_LIMIT - (now - db["ip_limit"][ip]))
         if wait > 0:
             return jsonify({
                 "status": "wait",
-                "message": f"Please wait {wait}s before getting a new key."
+                "message": f"Bypass detected! Try again in main page"
             }), 403
 
-    # --- GENERATE NEW KEY ---
+    # ðŸ”‘ KEY PREFIX
     prefix = "Kaze-" if source == "bot" else "KazeFreeKey-"
-    key = prefix + ''.join(random.choices(string.ascii_letters + string.digits, k=12))
-    
-    # 12 hours validity (12 * 3600 = 43200 seconds)
+
+    key = prefix + ''.join(
+        random.choices(string.ascii_letters + string.digits, k=12)
+    )
+
     expiry_seconds = convert_duration(duration)
 
     db["keys"][key] = {
         "expiry": now + expiry_seconds,
         "device": None,
-        "ip": ip,
         "revoked": False,
         "login_time": None
     }
 
-    # I-update ang IP limit para magsimula ang 1 minute cooldown
+    # set IP cooldown
     db["ip_limit"][ip] = now
+
+    # remove used token
     del db["tokens"][token_id]
+
     save_db()
 
     return jsonify({
