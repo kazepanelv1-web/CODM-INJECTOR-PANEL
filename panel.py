@@ -126,60 +126,45 @@ def token():
 # ======================
 @app.route("/getkey")
 def getkey():
-
     token_id = request.args.get("token")
     source = request.args.get("src", "site")
     duration = request.args.get("duration", "12h")
-
     now = time.time()
 
-    # â— STRICT TOKEN CHECK
-    if not token_id:
-        return jsonify({
-            "status": "error",
-            "message": "Missing token"
-        }), 403
+    if not token_id or token_id not in db["tokens"]:
+        return jsonify({"status": "error", "message": "Invalid Token"}), 403
 
-    if token_id not in db["tokens"]:
-        return jsonify({
-            "status": "error",
-            "message": "Token expired. Please generate again."
-        }), 403
+    ip = db["tokens"][token_id]["ip"]
 
-    token_data = db["tokens"][token_id]
-    ip = token_data["ip"]
-
-    # ðŸ”’ Anti spam check
-    if ip in db["ip_limit"]:
-        wait = int(KEY_LIMIT - (now - db["ip_limit"][ip]))
-        if wait > 0:
+    # --- BAGONG LOGIC: Check kung may existing key na itong IP ---
+    # Hinahanap natin kung may key na hindi pa expired para sa IP na ito
+    for existing_key, data in db["keys"].items():
+        # Dito, kailangan nating i-store ang IP sa key data (dagdagan natin sa baba)
+        if data.get("ip") == ip and now < data["expiry"] and not data.get("revoked"):
+            del db["tokens"][token_id] # Clean token pa rin
             return jsonify({
-                "status": "wait",
-                "message": f"Bypass detected! Try again in main page"
-            }), 403
+                "status": "success",
+                "key": existing_key,
+                "expires_in": int(data["expiry"] - now),
+                "note": "Existing key restored"
+            })
 
-    # ðŸ”‘ KEY PREFIX
+    # Kung wala pang key, proceed sa paggawa ng bago
     prefix = "Kaze-" if source == "bot" else "KazeFreeKey-"
-
-    key = prefix + ''.join(
-        random.choices(string.ascii_letters + string.digits, k=12)
-    )
-
+    key = prefix + ''.join(random.choices(string.ascii_letters + string.digits, k=12))
     expiry_seconds = convert_duration(duration)
 
+    # I-save ang IP sa loob ng key data para ma-track natin sa susunod
     db["keys"][key] = {
         "expiry": now + expiry_seconds,
         "device": None,
+        "ip": ip,  # <--- IMPORTANTE: Dagdag mo 'to
         "revoked": False,
         "login_time": None
     }
 
-    # set IP cooldown
     db["ip_limit"][ip] = now
-
-    # remove used token
     del db["tokens"][token_id]
-
     save_db()
 
     return jsonify({
@@ -187,7 +172,7 @@ def getkey():
         "key": key,
         "expires_in": expiry_seconds
     })
-
+    
 # ======================
 # VERIFY KEY
 # ======================
