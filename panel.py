@@ -128,6 +128,7 @@ def token():
 def getkey():
     token_id = request.args.get("token")
     source = request.args.get("src", "site")
+    # Naka-set na dito ang default na 12h validity
     duration = request.args.get("duration", "12h")
     now = time.time()
 
@@ -136,33 +137,31 @@ def getkey():
 
     ip = db["tokens"][token_id]["ip"]
 
-    # --- BAGONG LOGIC: Check kung may existing key na itong IP ---
-    # Hinahanap natin kung may key na hindi pa expired para sa IP na ito
-    for existing_key, data in db["keys"].items():
-        # Dito, kailangan nating i-store ang IP sa key data (dagdagan natin sa baba)
-        if data.get("ip") == ip and now < data["expiry"] and not data.get("revoked"):
-            del db["tokens"][token_id] # Clean token pa rin
+    # --- ANTI-SPAM CHECK (Dito papasok yung 1 min limit) ---
+    if ip in db["ip_limit"]:
+        wait = int(KEY_LIMIT - (now - db["ip_limit"][ip]))
+        if wait > 0:
             return jsonify({
-                "status": "success",
-                "key": existing_key,
-                "expires_in": int(data["expiry"] - now),
-                "note": "Existing key restored"
-            })
+                "status": "wait",
+                "message": f"Please wait {wait}s before getting a new key."
+            }), 403
 
-    # Kung wala pang key, proceed sa paggawa ng bago
+    # --- GENERATE NEW KEY ---
     prefix = "Kaze-" if source == "bot" else "KazeFreeKey-"
     key = prefix + ''.join(random.choices(string.ascii_letters + string.digits, k=12))
+    
+    # 12 hours validity (12 * 3600 = 43200 seconds)
     expiry_seconds = convert_duration(duration)
 
-    # I-save ang IP sa loob ng key data para ma-track natin sa susunod
     db["keys"][key] = {
         "expiry": now + expiry_seconds,
         "device": None,
-        "ip": ip,  # <--- IMPORTANTE: Dagdag mo 'to
+        "ip": ip,
         "revoked": False,
         "login_time": None
     }
 
+    # I-update ang IP limit para magsimula ang 1 minute cooldown
     db["ip_limit"][ip] = now
     del db["tokens"][token_id]
     save_db()
